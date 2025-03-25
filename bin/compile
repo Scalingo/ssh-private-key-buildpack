@@ -16,20 +16,22 @@ if [ -n "${ssh_key}" ]; then
 	echo "-----> Running SSH private key setup"
 
 	ssh_home="${HOME}/.ssh"
+	id_file="${ssh_home}/id_rsa"
+
 	mkdir --parents "${ssh_home}"
 
-	echo "${ssh_key}" | base64 --decode > "${ssh_home}/id_rsa"
+	echo "${ssh_key}" | base64 --decode > "${id_file}"
 
 	chmod 700 "${ssh_home}"
-	chmod 400 "${ssh_home}/id_rsa"
+	chmod 400 "${id_file}"
 
 	if [ -n "${BUILDPACK_DEBUG}" ]; then
-		echo "Successfully imported SSH key to ${HOME}/.ssh/id_rsa" | indent
+		echo "Successfully imported SSH key to ${id_file}" | indent
 	fi
 
 	IFS=',' read -ra HOST <<< "${ssh_hosts}"
 	for i in "${HOST[@]}"; do
-		ssh -oStrictHostKeyChecking=no -T "${i}" 2>&1 | indent
+		ssh -oStrictHostKeyChecking=no -T "${i}" -i "${id_file}" 2>&1 | indent
 	done
 
 	exit 0
