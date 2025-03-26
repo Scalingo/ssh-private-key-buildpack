@@ -14,33 +14,40 @@ ssh_hosts="${SSH_HOSTS:-"git@github.com"}"
 
 #
 # !! WARNING !!
+#
 # OpenSSH doesn't use $HOME.
+#
 # Consequently, we have to:
-# - use a variable ($build_home) to point to the **real** home directory
+# - use a variable ($real_home) to point to the **real** home directory
 #   when in build phase (which is different than the one pointed by $HOME).
-# - use another one ($run_home) to point to the home directory
-#   when in run phase.
-# - copy the generated files in $build_home to $run_home at the end
+# - use another one ($ssh_home) to point to the home directory
+#   when in run phase. In this case, we **must** use $HOME:
+#     During build, $HOME points to something like `/build/<build_id>` ;
+#     During run, $HOME points to `/app`.
+#     We have to copy the files to (build-)$HOME so they end up in (run-)$HOME.
+#     Using $HOME makes this transparent.
+# - copy the generated files in $real_home to $ssh_home at the end
 #   of the process.
 #
 
 if [ -n "${ssh_key}" ]; then
 	echo "-----> Running SSH private key setup"
 
-	# Path to the ssh directory when in BUILD phase:
-	build_home="$( getent passwd "$( whoami )" | cut -d ':' -f6 )/.ssh"
+	# Path to the **real** SSH home directory when in BUILD phase:
+	# (not the one pointed by $HOME!)
+	real_home="$( getent passwd "$( whoami )" | cut -d ':' -f6 )/.ssh"
 
-	# Path to the ssh directory when in RUN phase:
-	run_home="${HOME}/.ssh"
+	# Path to the SSH home directory when in RUN phase:
+	ssh_home="${HOME}/.ssh"
 
-	id_file="${build_home}/id_rsa"
-
-	mkdir --parents "${build_home}" "${run_home}"
+	mkdir --parents "${real_home}" "${ssh_home}"
+	
+	id_file="${real_home}/id_rsa"
 
 	# Create the SSH private key:
 	echo "${ssh_key}" | base64 --decode > "${id_file}"
 
-	chmod 700 "${build_home}" "${run_home}"
+	chmod 700 "${real_home}" "${ssh_home}"
 	chmod 400 "${id_file}"
 
 	if [ -n "${BUILDPACK_DEBUG}" ]; then
@@ -53,13 +60,12 @@ if [ -n "${ssh_key}" ]; then
 		ssh -oStrictHostKeyChecking=no -T "${i}" -i "${id_file}" 2>&1 | indent
 	done
 
-	# Now that everything is setup in build_home,
-	# copy the files to run_home so they are available at RUN time:
-	cp --archive "${build_home}/." "${run_home}/"
-	chmod 400 "${run_home}/id_rsa"
+	# Now that everything is setup in real_home,
+	# copy the files to ssh_home so they are also available at RUN time:
+	cp --archive "${real_home}/." "${ssh_home}/"
 
 	if [ -n "${BUILDPACK_DEBUG}" ]; then
-		echo "Successfully copied SSH files to ${run_home}" | indent
+		echo "Successfully copied SSH files to ${ssh_home}" | indent
 	fi
 
 	exit 0
